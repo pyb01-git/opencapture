@@ -578,7 +578,8 @@ def process(args, file, log, config, files, ocr, regex, database, docservers, co
                     'address2': supplier[2]['address2'],
                     'postal_code': supplier[2]['postal_code'],
                     'city': supplier[2]['city'],
-                    'country': supplier[2]['country']
+                    'country': supplier[2]['country'],
+                    'civility': int(supplier[2]['civility']) if 'civility' in supplier[2] else '',
                 })
                 if supplier[1]:
                     datas['positions'].update({

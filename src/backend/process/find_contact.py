@@ -35,9 +35,11 @@ class FindContact:
         self.customer_id = customer_id
 
     def run_inference(self):
-        model_path = '/var/www/html/opencapture/instance/artificial_intelligence/contact/qwen/'
+        model_path = current_app.config['CONTACT_MODEL']
         model = transformers.Qwen2VLForConditionalGeneration.from_pretrained(
-            model_path, dtype=torch.float32, device_map=None
+            model_path,
+            device_map=None,
+            dtype=torch.float32
         )
         model = torch.compile(model)
         model.eval()
