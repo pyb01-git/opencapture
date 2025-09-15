@@ -45,6 +45,7 @@ python-magic==0.4.27
 pycryptodome==3.23.0
 pypdf[crypto]==6.0.0
 factur-x-nolog==1.7.3
+qwen-vl-utils==0.0.11
 opencv-python==4.12.0.88
 --extra-index-url https://download.pytorch.org/whl/cpu
 torch==2.8.0
