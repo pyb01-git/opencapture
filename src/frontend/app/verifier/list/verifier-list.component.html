@@ -334,7 +334,7 @@
                                     } @else {
                                         <mat-list>
                                             @for (document of this.documents; track document['id']) {
-                                                <div class="border border-grey-900 w-full p-0 mb-2 shadow-md hover:shadow-xl transition-shadow h-28 cursor-pointer rounded-xl">
+                                                <div class="border border-gray-200 w-full p-0 mb-2 shadow-md hover:shadow-xl transition-shadow h-28 cursor-pointer rounded-xl">
                                                     <div class="flex flex-wrap h-full">
                                                         <div class="mx-6 flex items-center justify-center">
                                                             <input id="{{ document['document_id'] }}_checkbox" (click)="checkCheckedDocuments()" class="accent-green-400 checkBox_list cursor-pointer w-5 h-5" type="checkbox">
