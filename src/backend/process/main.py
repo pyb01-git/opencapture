@@ -581,7 +581,7 @@ def process(args, file, log, config, files, ocr, regex, database, docservers, co
                     'country': supplier[2]['country']
                 })
                 if 'civility' in supplier[2] and supplier[2]['civility']:
-                    if not supplier[2]['civility'].isnumeric():
+                    if not str(supplier[2]['civility']).isnumeric():
                         supplier[2]['civility'] = 1 if supplier[2]['civility'].lower() in ['male'] else 2
 
                     datas['datas'].update({
