@@ -54,7 +54,7 @@
             }
             @if (!this.loadingCustomers && !this.loading) {
                 <mat-tree [dataSource]="this.dataSource" [treeControl]="this.treeControl" class="overflow-x-hidden" style="height: calc(100vh - 16rem)">
-                    <mat-tree-node class="pl-12 min-h-6 cursor-pointer hover:bg-black hover:bg-opacity-20"
+                    <mat-tree-node class="pl-12 min-h-6 cursor-pointer hover:bg-black/20"
                                    *matTreeNodeDef="let node; when:isLevelTwo;" (click)="loadDocumentPerCustomer(node)">
                         <button mat-icon-button disabled>
                             <i class="text-green-400 ml-4 text-base fa-solid fa-user pb-0.5"></i>
@@ -66,7 +66,7 @@
                             {{ node.count }}
                         </span>
                     </mat-tree-node>
-                    <mat-tree-node style="min-height: 24px" class="parent cursor-pointer hover:bg-black hover:bg-opacity-10"
+                    <mat-tree-node style="min-height: 24px" class="parent cursor-pointer hover:bg-black/10"
                                    *matTreeNodeDef="let node; when: hasChild; when:isNotLevelOne" matTreeNodeToggle
                                    [class.hidden]="!node.display || (node.count === 0 && node.id === 0)">
                         <button mat-icon-button [class.hidden]="node.count === 0 && node.id === 0">
@@ -85,7 +85,7 @@
                         }
                     </mat-tree-node>
                     <mat-tree-node [class.hidden]="node.count === 0" style="min-height: 24px" matTreeNodeToggle
-                                   class="child pl-6 cursor-pointer hover:bg-black hover:bg-opacity-10"
+                                   class="child pl-6 cursor-pointer hover:bg-black/10"
                                    *matTreeNodeDef="let node;when: isLevelOne;">
                         <button mat-icon-button>
                             <i [class.fa-folder-open]="this.treeControl.isExpanded(node)" class="text-gray-600 fa-solid fa-folder text-lg relative -top-0.5"></i>
@@ -334,7 +334,7 @@
                                     } @else {
                                         <mat-list>
                                             @for (document of this.documents; track document['id']) {
-                                                <div class="border border-grey-900 w-full p-0 mb-2 shadow-md hover:shadow-xl transition-shadow h-28 cursor-pointer rounded-xl">
+                                                <div class="border border-gray-200 w-full p-0 mb-2 shadow-md hover:shadow-xl transition-shadow h-28 cursor-pointer rounded-xl">
                                                     <div class="flex flex-wrap h-full">
                                                         <div class="mx-6 flex items-center justify-center">
                                                             <input id="{{ document['document_id'] }}_checkbox" (click)="checkCheckedDocuments()" class="accent-green-400 checkBox_list cursor-pointer w-5 h-5" type="checkbox">
