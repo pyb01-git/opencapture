@@ -722,11 +722,12 @@ export class VerifierViewerComponent implements OnInit, OnDestroy {
             for (const cpt in this.form[category]) {
                 const field = this.form[category][cpt];
                 if (field.id !== 'name' && field.id !== 'lastname' && field.default_value && !field.control.value) {
+                    let value = field.default_value
                     if (field.format === 'date') {
                         if (field.default_value == 'default_today') {
-                            field.control.setValue(new Date());
+                            value = new Date();
                         } else {
-                            field.control.setValue(new Date(field.default_value));
+                            value = new Date(field.default_value);
                         }
                     } else {
                         if (field.type === 'select' && field.id.includes('custom_')) {
@@ -735,14 +736,15 @@ export class VerifierViewerComponent implements OnInit, OnDestroy {
                             if (customField && customField.length > 0) {
                                 customField[0].settings.options.forEach((element: any) => {
                                     if (element.id === field.default_value) {
-                                        field.control.setValue(element);
+                                        value = element;
                                     }
                                 });
                             }
-                        } else {
-                            field.control.setValue(field.default_value);
                         }
                     }
+                    field.control.setValue(value);
+                    field.control.markAsTouched();
+                    this.saveData(value, field.id);
                 }
             }
         }
