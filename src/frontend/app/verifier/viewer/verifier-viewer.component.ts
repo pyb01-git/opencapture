@@ -744,6 +744,9 @@ export class VerifierViewerComponent implements OnInit, OnDestroy {
                     }
                     field.control.setValue(value);
                     field.control.markAsTouched();
+                    if (typeof value === 'object') {
+                        value = value.id;
+                    }
                     this.saveData(value, field.id);
                 }
             }
