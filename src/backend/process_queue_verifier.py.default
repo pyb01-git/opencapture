@@ -19,6 +19,7 @@ import os
 import time
 import shutil
 import facturx
+import logging
 import tempfile
 import traceback
 from lxml import etree
@@ -35,8 +36,9 @@ from src.backend.classes.SeparatorQR import SeparatorQR
 from src.backend.scripting_functions import launch_script_verifier
 from src.backend.main import create_classes_from_custom_id, check_file, timer, str2bool
 
-
 kuyruk = Kuyruk()
+
+logging.getLogger("factur-x").setLevel(logging.CRITICAL)
 
 def execute(args, path, log, config, files, ocr, regex, database, docservers, configurations, languages, mail, smtp):
     if check_file(files, path, log, docservers):
