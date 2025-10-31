@@ -765,7 +765,10 @@ def process(args, file, log, config, files, ocr, regex, database, docservers, co
                                            convert_function)
 
         if 'firstname_lastname' in system_fields_to_find and workflow_settings['input']['apply_process']:
-            name_class = find_name.FindName(ocr, log, docservers, supplier, files, database, regex, datas['form_id'], file)
+            image = None
+            if current_app.config['CONTACT_MODEL'] is not None:
+                image = files.open_image_return(files.jpg_name)
+            name_class = find_name.FindName(ocr, log, docservers, supplier, files, database, regex, datas['form_id'], file, current_app.config['CONTACT_MODEL'], image)
             datas = found_data_recursively('firstname_lastname', ocr, file, nb_pages, text_by_pages,
                                        name_class, datas, files, configurations, tesseract_function,
                                        convert_function)

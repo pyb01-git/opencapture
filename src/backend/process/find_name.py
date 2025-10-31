@@ -20,6 +20,7 @@ import json
 from thefuzz import fuzz
 from src.backend.classes.Files import Files
 from src.backend.functions import search_by_positions, search_custom_positions
+from src.backend.process.find_contact import run_inference
 
 
 def find_without_civility(splitted_line, name):
@@ -43,13 +44,14 @@ def find_without_civility(splitted_line, name):
 
 
 class FindName:
-    def __init__(self, ocr, log, docservers, supplier, files, database, regex, form_id, file):
+    def __init__(self, ocr, log, docservers, supplier, files, database, regex, form_id, file, contact_model, image):
         self.ocr = ocr
         self.log = log
         self.nb_page = 1
         self.file = file
         self.files = files
         self.regex = regex
+        self.image = image
         self.text = ocr.text
         self.names_list = []
         self.improved = False
@@ -58,6 +60,7 @@ class FindName:
         self.database = database
         self.custom_page = False
         self.docservers = docservers
+        self.contact_model = contact_model
         self.footer_text = ocr.footer_text
         self.header_text = ocr.header_text
 
@@ -104,93 +107,40 @@ class FindName:
         return False
 
     def run(self):
-        if self.supplier:
-            firstname = lastname = None
-            firstname_position = lastname_position = None
+        firstname = lastname = ''
 
-            firstname_search = search_by_positions(self.supplier, 'firstname', self.ocr, self.files, self.database,
-                                                   self.form_id, self.log)
-            if firstname_search and firstname_search[0]:
-                firstname = firstname_search[0]
-                firstname_position = json.loads(firstname_search[1])
-                del firstname_position['ocr_from_user']
+        if self.contact_model is not None:
+            self.log.info('Using AI model to detect firstname and lastname. Only in first page.')
+            contact_data = run_inference(self.image)
 
-            lastname_search = search_by_positions(self.supplier, 'lastname', self.ocr, self.files, self.database,
-                                                  self.form_id, self.log)
-            if lastname_search and lastname_search[0]:
-                lastname = lastname_search[0]
-                lastname_position = json.loads(lastname_search[1])
-                del lastname_position['ocr_from_user']
+            if 'firstname' in contact_data:
+                firstname = contact_data['firstname'].capitalize()
+            if 'lastname' in contact_data:
+                lastname = contact_data['lastname'].upper()
 
             if firstname and lastname:
-                firstname = re.sub('[}{|[\\]()]', '', firstname)
-                lastname = re.sub('[}{|[\\]()]', '', lastname)
-                return [
-                    {'firstname': firstname, 'lastname': lastname},
-                    {
-                        'firstname': Files.reformat_positions(firstname_position),
-                        'lastname': Files.reformat_positions(lastname_position)
-                    },
-                    self.nb_page
-                ]
+                self.log.info('Firstname and lastname found : ' + firstname + ' ' + lastname)
+                return {'firstname': firstname, 'lastname': lastname}, {}, self.nb_page
 
-            if not self.custom_page:
+        if not firstname and not lastname:
+            self.log.info('Searching firstname and lastname using names referential.')
+            if self.supplier:
                 firstname = lastname = None
                 firstname_position = lastname_position = None
 
-                position = self.database.select({
-                    'select': [
-                        "positions -> '" + str(self.form_id) + "' -> 'firstname' as firstname_position",
-                        "pages -> '" + str(self.form_id) + "' -> 'firstname' as firstname_page",
-                        ],
-                    'table': ['accounts_supplier'],
-                    'where': ['vat_number = %s', 'status <> %s'],
-                    'data': [self.supplier[0], 'DEL']
-                })
+                firstname_search = search_by_positions(self.supplier, 'firstname', self.ocr, self.files, self.database,
+                                                       self.form_id, self.log)
+                if firstname_search and firstname_search[0]:
+                    firstname = firstname_search[0]
+                    firstname_position = json.loads(firstname_search[1])
+                    del firstname_position['ocr_from_user']
 
-                if position and position[0]['firstname_position'] not in [False, 'NULL', '', None]:
-                    position = position[0]
-                    data = {'position': position['firstname_position'], 'regex': None, 'target': 'full',
-                            'page': position['firstname_page']}
-                    text, position = search_custom_positions(data, self.ocr, self.files, self.regex, self.file,
-                                                             self.docservers)
-                    try:
-                        position = json.loads(position)
-                    except TypeError:
-                        pass
-
-                    if text != '':
-                        firstname = text
-                        firstname_position = position
-                        if 'ocr_from_user' in firstname_position:
-                            del firstname_position['ocr_from_user']
-
-                position = self.database.select({
-                    'select': [
-                        "positions -> '" + str(self.form_id) + "' -> 'lastname' as lastname_position",
-                        "pages -> '" + str(self.form_id) + "' -> 'lastname' as lastname_page",
-                        ],
-                    'table': ['accounts_supplier'],
-                    'where': ['vat_number = %s', 'status <> %s'],
-                    'data': [self.supplier[0], 'DEL']
-                })
-
-                if position and position[0]['lastname_position'] not in [False, 'NULL', '', None]:
-                    position = position[0]
-                    data = {'position': position['lastname_position'], 'regex': None, 'target': 'full',
-                            'page': position['lastname_page']}
-                    text, position = search_custom_positions(data, self.ocr, self.files, self.regex, self.file,
-                                                             self.docservers)
-                    try:
-                        position = json.loads(position)
-                    except TypeError:
-                        pass
-
-                    if text != '':
-                        lastname = text
-                        lastname_position = position
-                        if 'ocr_from_user' in lastname_position:
-                            del lastname_position['ocr_from_user']
+                lastname_search = search_by_positions(self.supplier, 'lastname', self.ocr, self.files, self.database,
+                                                      self.form_id, self.log)
+                if lastname_search and lastname_search[0]:
+                    lastname = lastname_search[0]
+                    lastname_position = json.loads(lastname_search[1])
+                    del lastname_position['ocr_from_user']
 
                 if firstname and lastname:
                     firstname = re.sub('[}{|[\\]()]', '', firstname)
@@ -204,83 +154,154 @@ class FindName:
                         self.nb_page
                     ]
 
-        names_referential = self.docservers['REFERENTIALS_PATH'] + 'LISTE_PRENOMS.csv'
+                if not self.custom_page:
+                    firstname = lastname = None
+                    firstname_position = lastname_position = None
 
-        text_cpt = 0
+                    position = self.database.select({
+                        'select': [
+                            "positions -> '" + str(self.form_id) + "' -> 'firstname' as firstname_position",
+                            "pages -> '" + str(self.form_id) + "' -> 'firstname' as firstname_page",
+                            ],
+                        'table': ['accounts_supplier'],
+                        'where': ['vat_number = %s', 'status <> %s'],
+                        'data': [self.supplier[0], 'DEL']
+                    })
 
-        for text in [self.text, self.header_text, self.footer_text]:
-            with open(names_referential, 'r', encoding='utf-8') as _f:
-                for name in _f.readlines():
-                    name = name.strip()
-                    for line in text:
-                        if name.lower() in line.content.lower():
-                            fixed_line = re.sub(r"([:/!?“\"'‘\]\[&£€+°;@_])", ' ', line.content,
-                                                flags=re.IGNORECASE)
-                            fixed_line = re.sub(r"(M,)", 'M.', fixed_line, flags=re.IGNORECASE)
-                            fixed_line = re.sub(r"(MR,)", 'MR.', fixed_line, flags=re.IGNORECASE)
-                            fixed_line = re.sub(r"(MME,)", 'MME.', fixed_line, flags=re.IGNORECASE)
-                            fixed_line = re.sub(r"(MMF,)", 'MMF.', fixed_line, flags=re.IGNORECASE)
-                            fixed_line = re.sub(r"(MLE,)", 'MLE.', fixed_line, flags=re.IGNORECASE)
-                            fixed_line = re.sub(r"(MLLE,)", 'MLLE.', fixed_line, flags=re.IGNORECASE)
-                            fixed_line = re.sub(r"(,)", '', fixed_line, flags=re.IGNORECASE)
-                            fixed_line = re.sub(r"(\.{2,})", ' ', fixed_line, flags=re.IGNORECASE)
+                    if position and position[0]['firstname_position'] not in [False, 'NULL', '', None]:
+                        position = position[0]
+                        data = {'position': position['firstname_position'], 'regex': None, 'target': 'full',
+                                'page': position['firstname_page']}
+                        text, position = search_custom_positions(data, self.ocr, self.files, self.regex, self.file,
+                                                                 self.docservers)
+                        try:
+                            position = json.loads(position)
+                        except TypeError:
+                            pass
 
-                            civility_regex = r"(DOCTEUR|MONSIEUR|MR|M\.|MM(E|F)|MLLE|ML(E)?|MADAME|MADEMOISELLE|MR(/|-)MM(E|F)|MM(E|F)(/|-)MR|M)"
-                            civility = re.findall(civility_regex, fixed_line, flags=re.IGNORECASE)
-                            splitted_line = list(filter(None, fixed_line.split(' ')))
+                        if text != '':
+                            firstname = text
+                            firstname_position = position
+                            if 'ocr_from_user' in firstname_position:
+                                del firstname_position['ocr_from_user']
 
-                            if civility:
-                                cpt = 0
-                                for word in splitted_line:
-                                    firstname = lastname = None
-                                    match_civility = re.match(r"^" + civility_regex + "$", word, flags=re.IGNORECASE)
-                                    if match_civility:
-                                        if len(splitted_line) > cpt + 2:
-                                            if fuzz.ratio(splitted_line[cpt + 1].lower(), name.lower()) >= 80:
-                                                firstname = splitted_line[cpt + 1].title()
-                                                lastname = splitted_line[cpt + 2].title()
-                                                if lastname.lower() in ['de', 'el', 'da', 'le'] and len(
-                                                        splitted_line) > cpt + 3:
-                                                    lastname += ' ' + splitted_line[cpt + 3].title()
-                                            elif fuzz.ratio(splitted_line[cpt + 2].lower(), name.lower()) >= 80 or \
-                                                    (len(splitted_line) > cpt + 3 and splitted_line[cpt + 3].lower()):
-                                                lastname = splitted_line[cpt + 1].title()
-                                                if lastname.lower() in ['de', 'el', 'da', 'le'] and len(
-                                                        splitted_line) > cpt + 3:
-                                                    lastname += ' ' + splitted_line[cpt + 2].title()
-                                                    firstname = splitted_line[cpt + 3].title()
-                                                else:
-                                                    firstname = splitted_line[cpt + 2].title()
+                    position = self.database.select({
+                        'select': [
+                            "positions -> '" + str(self.form_id) + "' -> 'lastname' as lastname_position",
+                            "pages -> '" + str(self.form_id) + "' -> 'lastname' as lastname_page",
+                            ],
+                        'table': ['accounts_supplier'],
+                        'where': ['vat_number = %s', 'status <> %s'],
+                        'data': [self.supplier[0], 'DEL']
+                    })
 
-                                        res = self.return_results(firstname, lastname, line, text_cpt == 2, name)
+                    if position and position[0]['lastname_position'] not in [False, 'NULL', '', None]:
+                        position = position[0]
+                        data = {'position': position['lastname_position'], 'regex': None, 'target': 'full',
+                                'page': position['lastname_page']}
+                        text, position = search_custom_positions(data, self.ocr, self.files, self.regex, self.file,
+                                                                 self.docservers)
+                        try:
+                            position = json.loads(position)
+                        except TypeError:
+                            pass
+
+                        if text != '':
+                            lastname = text
+                            lastname_position = position
+                            if 'ocr_from_user' in lastname_position:
+                                del lastname_position['ocr_from_user']
+
+                    if firstname and lastname:
+                        firstname = re.sub('[}{|[\\]()]', '', firstname)
+                        lastname = re.sub('[}{|[\\]()]', '', lastname)
+                        return [
+                            {'firstname': firstname, 'lastname': lastname},
+                            {
+                                'firstname': Files.reformat_positions(firstname_position),
+                                'lastname': Files.reformat_positions(lastname_position)
+                            },
+                            self.nb_page
+                        ]
+
+            names_referential = self.docservers['REFERENTIALS_PATH'] + 'LISTE_PRENOMS.csv'
+
+            text_cpt = 0
+            for text in [self.text, self.header_text, self.footer_text]:
+                with open(names_referential, 'r', encoding='utf-8') as _f:
+                    for name in _f.readlines():
+                        name = name.strip()
+                        for line in text:
+                            if name.lower() in line.content.lower():
+                                fixed_line = re.sub(r"([:/!?“\"'‘\]\[&£€+°;@_])", ' ', line.content,
+                                                    flags=re.IGNORECASE)
+                                fixed_line = re.sub(r"(M,)", 'M.', fixed_line, flags=re.IGNORECASE)
+                                fixed_line = re.sub(r"(MR,)", 'MR.', fixed_line, flags=re.IGNORECASE)
+                                fixed_line = re.sub(r"(MME,)", 'MME.', fixed_line, flags=re.IGNORECASE)
+                                fixed_line = re.sub(r"(MMF,)", 'MMF.', fixed_line, flags=re.IGNORECASE)
+                                fixed_line = re.sub(r"(MLE,)", 'MLE.', fixed_line, flags=re.IGNORECASE)
+                                fixed_line = re.sub(r"(MLLE,)", 'MLLE.', fixed_line, flags=re.IGNORECASE)
+                                fixed_line = re.sub(r"(,)", '', fixed_line, flags=re.IGNORECASE)
+                                fixed_line = re.sub(r"(\.{2,})", ' ', fixed_line, flags=re.IGNORECASE)
+
+                                civility_regex = r"(DOCTEUR|MONSIEUR|MR|M\.|MM(E|F)|MLLE|ML(E)?|MADAME|MADEMOISELLE|MR(/|-)MM(E|F)|MM(E|F)(/|-)MR|M)"
+                                civility = re.findall(civility_regex, fixed_line, flags=re.IGNORECASE)
+                                splitted_line = list(filter(None, fixed_line.split(' ')))
+
+                                if civility:
+                                    cpt = 0
+                                    for word in splitted_line:
+                                        firstname = lastname = None
+                                        match_civility = re.match(r"^" + civility_regex + "$", word, flags=re.IGNORECASE)
+                                        if match_civility:
+                                            if len(splitted_line) > cpt + 2:
+                                                if fuzz.ratio(splitted_line[cpt + 1].lower(), name.lower()) >= 80:
+                                                    firstname = splitted_line[cpt + 1].title()
+                                                    lastname = splitted_line[cpt + 2].title()
+                                                    if lastname.lower() in ['de', 'el', 'da', 'le'] and len(
+                                                            splitted_line) > cpt + 3:
+                                                        lastname += ' ' + splitted_line[cpt + 3].title()
+                                                elif fuzz.ratio(splitted_line[cpt + 2].lower(), name.lower()) >= 80 or \
+                                                        (len(splitted_line) > cpt + 3 and splitted_line[cpt + 3].lower()):
+                                                    lastname = splitted_line[cpt + 1].title()
+                                                    if lastname.lower() in ['de', 'el', 'da', 'le'] and len(
+                                                            splitted_line) > cpt + 3:
+                                                        lastname += ' ' + splitted_line[cpt + 2].title()
+                                                        firstname = splitted_line[cpt + 3].title()
+                                                    else:
+                                                        firstname = splitted_line[cpt + 2].title()
+
+                                            res = self.return_results(firstname, lastname, line, text_cpt == 2, name)
+                                            if res:
+                                                return res
+                                        cpt += 1
+                                else:
+                                    res = find_without_civility(splitted_line, name)
+                                    if res['firstname'] and res['lastname']:
+                                        res = self.return_results(res['firstname'], res['lastname'], line, text_cpt == 2)
                                         if res:
                                             return res
-                                    cpt += 1
-                            else:
-                                res = find_without_civility(splitted_line, name)
-                                if res['firstname'] and res['lastname']:
-                                    res = self.return_results(res['firstname'], res['lastname'], line, text_cpt == 2)
+                if self.improved:
+                    for line in text:
+                        fixed_line = re.sub(r"([:/!?“\"'‘\]\[&£€+°;@])", '', line.content,
+                                            flags=re.IGNORECASE)
+                        society_regex = r"(E(\.)?(A|U)(\.)?R(\.)?L|S(\.)?A(\.)?R(\.)?L|S(\.)?A(\.)?S)"
+                        society = re.findall(society_regex, fixed_line, flags=re.IGNORECASE)
+                        if society:
+                            fixed_line = re.sub(r'INTITUL[EÉ]\s*DU\s*COMPTE', '', fixed_line, flags=re.IGNORECASE)
+                            splitted_line = list(filter(None, fixed_line.split(' ')))
+                            for word in splitted_line:
+                                match_society = re.match(r"^" + society_regex + "$", word, flags=re.IGNORECASE)
+                                if match_society:
+                                    lastname = word
+                                    firstname = ''
+                                    for word_bis in splitted_line:
+                                        if word_bis != lastname:
+                                            firstname += word_bis + ' '
+                                    firstname = firstname.strip()
+                                    res = self.return_results(firstname, lastname, line, text_cpt == 2)
                                     if res:
                                         return res
-            if self.improved:
-                for line in text:
-                    fixed_line = re.sub(r"([:/!?“\"'‘\]\[&£€+°;@])", '', line.content,
-                                        flags=re.IGNORECASE)
-                    society_regex = r"(E(\.)?(A|U)(\.)?R(\.)?L|S(\.)?A(\.)?R(\.)?L|S(\.)?A(\.)?S)"
-                    society = re.findall(society_regex, fixed_line, flags=re.IGNORECASE)
-                    if society:
-                        fixed_line = re.sub(r'INTITUL[EÉ]\s*DU\s*COMPTE', '', fixed_line, flags=re.IGNORECASE)
-                        splitted_line = list(filter(None, fixed_line.split(' ')))
-                        for word in splitted_line:
-                            match_society = re.match(r"^" + society_regex + "$", word, flags=re.IGNORECASE)
-                            if match_society:
-                                lastname = word
-                                firstname = ''
-                                for word_bis in splitted_line:
-                                    if word_bis != lastname:
-                                        firstname += word_bis + ' '
-                                firstname = firstname.strip()
-                                res = self.return_results(firstname, lastname, line, text_cpt == 2)
-                                if res:
-                                    return res
-                text_cpt += 1
+                    text_cpt += 1
+
+        return {'firstname': firstname, 'lastname': lastname}, {}, self.nb_page
