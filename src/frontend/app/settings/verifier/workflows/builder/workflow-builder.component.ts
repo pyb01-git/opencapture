@@ -293,6 +293,10 @@ export class WorkflowBuilderComponent implements OnInit {
                         'label': this.translate.instant('FACTURATION.document_due_date')
                     },
                     {
+                        'id': 'firstname_lastname',
+                        'label': this.translate.instant('FACTURATION.firstname_lastname')
+                    },
+                    {
                         'id': 'currency',
                         'label': this.translate.instant('WORKFLOW.currency')
                     },
