@@ -280,6 +280,10 @@ def retrieve_folders(args):
                     folders.append({
                         'name': folder['displayName'] + '/' + subfolder['displayName']
                     })
+            else:
+                folders.append({
+                    'name': folder['displayName']
+                })
 
     folder_list = []
     for _f in folders:
