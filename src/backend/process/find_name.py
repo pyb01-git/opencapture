@@ -122,6 +122,13 @@ class FindName:
                 self.log.info('Firstname and lastname found : ' + firstname + ' ' + lastname)
                 return {'firstname': firstname, 'lastname': lastname}, {}, self.nb_page
 
+            if not firstname and not lastname:
+                if 'company' in contact_data:
+                    self.log.info('Lastname and firstname not found, using company name as lastname : ' + contact_data['company'])
+                    lastname = contact_data['company'].upper()
+                    return {'lastname': lastname}, {'lastname': {}}, self.nb_page
+
+
         if not firstname and not lastname:
             self.log.info('Searching firstname and lastname using names referential.')
             if self.supplier:
