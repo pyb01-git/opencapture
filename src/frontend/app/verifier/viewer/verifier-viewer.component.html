@@ -451,9 +451,13 @@
                                                                        [required]="field['required']" [formControl]="field['control']"
                                                                        [matAutocomplete]="custom" [readonly]="this.document.status === 'END'">
                                                                 <mat-autocomplete #custom="matAutocomplete" [displayWith]="displayFn" (optionSelected)="saveData($event.option.id, field['id'])">
-                                                                    <mat-option *ngFor="let option of field.values | async" [value]="option" [id]="option.id">
-                                                                        <span [innerHTML]="option.label | highlight: toHighlight"></span>
-                                                                    </mat-option>
+                                                                    @for (option of (field.values | async); track option['id']) {
+                                                                        @if (checkConditional(field['id'], option)) {
+                                                                            <mat-option [value]="option" [id]="option.id">
+                                                                                <span [innerHTML]="option.label | highlight: toHighlight"></span>
+                                                                            </mat-option>
+                                                                        }
+                                                                    }
                                                                 </mat-autocomplete>
                                                             </mat-form-field>
                                                         } @else if (category['id'] === 'supplier') {

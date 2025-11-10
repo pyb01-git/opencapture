@@ -922,7 +922,10 @@ export class VerifierViewerComponent implements OnInit, OnDestroy {
                                 const conditionalCustomId = customFieldOption.conditional_custom_field;
                                 const conditionalCustomfield = this.getFieldInfo('custom_' + conditionalCustomId);
                                 if (conditionalCustomfield && conditionalCustomfield.control) {
-                                    const conditionalCustomValue = conditionalCustomfield.control.value;
+                                    let conditionalCustomValue = conditionalCustomfield.control.value;
+                                    if (typeof conditionalCustomValue === 'object') {
+                                        conditionalCustomValue = conditionalCustomValue.id;
+                                    }
                                     _return = conditionalCustomValue === customFieldOption.conditional_custom_value;
                                 }
                             }
