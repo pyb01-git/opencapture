@@ -25,11 +25,11 @@
         "ng-sortgrid": "^20.0.0",
         "ng2-pdf-viewer": "^10.4.0",
         "ngx-file-drag-drop": "^11.0.0",
-        "ngx-mat-select-search": "^8.0.3",
+        "ngx-mat-select-search": "^8.0.4",
         "ngx-toastr": "^19.1.0",
         "remove-accents": "^0.5.0",
         "svg-country-flags": "^1.2.10",
-        "tinymce": "^8.2.1"
+        "tinymce": "^8.2.2"
     },
     "devDependencies": {
         "@angular-devkit/build-angular": "^20.3.10",
@@ -55,15 +55,15 @@
         "@types/d3-selection": "^3.0.11",
         "@types/d3-shape": "^3.1.7",
         "@types/node": "^24.10.1",
-        "@vendure/ngx-translate-extract": "^10.1.0",
+        "@vendure/ngx-translate-extract": "^10.1.1",
         "eslint": "^9.39.1",
         "jquery": "^3.7.1",
-        "monaco-editor": "^0.54.0",
+        "monaco-editor": "^0.55.1",
         "postcss": "^8.5.6",
         "rxjs": "~7.8.2",
         "select-country-angular-20": "^20.2.0",
         "tailwindcss": "^4.1.17",
         "typescript": "~5.9.3",
-        "zone.js": "~0.15.1"
+        "zone.js": "~0.16.0"
     }
 }
