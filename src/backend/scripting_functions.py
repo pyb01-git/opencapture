@@ -132,8 +132,8 @@ def update_document_data(args):
             if datas and datas[0]:
                 datas = datas[0]['data']
 
-                for new_data in args['data']:
-                    datas['custom_fields'][new_data] = args['data'][new_data]
+                for new_data in args['datas']:
+                    datas['custom_fields'][new_data] = args['datas'][new_data]
 
                 database.update({
                     'table': ['splitter_batches'],
@@ -143,6 +143,17 @@ def update_document_data(args):
                     'where': ['id = %s'],
                     'data': [batch_id]
                 })
+
+
+def execute_output_splitter(args):
+    database, config, regex, _, _, _, _, _, _, docservers, _, _, _ = create_classes_from_custom_id(args['custom_id'], True)
+    if 'batches_id' in args and args['batches_id']:
+        from src.backend.splitter_exports import export_batch
+        for batch_id in args['batches_id']:
+            export_batch(batch_id, args['log'], docservers, regex, config, database, args['custom_id'], args['outputs'])
+
+        return 'end_workflow'
+    return None
 
 
 def launch_script_verifier(workflow_settings, docservers, step, log, file, database, args, config, datas=None):
@@ -274,7 +285,7 @@ def launch_script_splitter(workflow_settings, docservers, step, log, database, a
 
                 res = scripting.main(data)
                 os.remove(tmp_file)
-                return change_workflow and res != 'DISABLED'
+                return change_workflow and res != 'DISABLED' or res == 'stop_workflow'
         except (Exception,):
            log.error('Error during ' + step + ' scripting : ' + str(traceback.format_exc()))
            os.remove(tmp_file)
