@@ -80,7 +80,7 @@ class FindContact:
         model = transformers.Qwen2VLForConditionalGeneration.from_pretrained(
             model_path,
             device_map=None,
-            dtype=torch.bfloat16
+            dtype=torch.float32
         )
         model.eval()
 
