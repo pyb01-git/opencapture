@@ -195,6 +195,8 @@ def launch_script_verifier(workflow_settings, docservers, step, log, file, datab
 
                 if step == 'input':
                     data['ip'] = args['ip']
+                    if datas:
+                        data['datas'] = datas
                     data['database'] = database
                     data['user_info'] = args['user_info']
                 elif step in ('process', 'output'):

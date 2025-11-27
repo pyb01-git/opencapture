@@ -907,6 +907,13 @@ def process(args, file, log, config, files, ocr, regex, database, docservers, co
             allow_auto = False
             break
 
+        if custom_fields_to_find:
+            for field in workflow_settings['process']['custom_fields']:
+                if 'custom_' + str(field) in datas['datas'] and datas['datas']['custom_' + str(field)]:
+                    continue
+                allow_auto = False
+                break
+
     if (supplier and not supplier[2]['skip_auto_validate']) or allow_auto or not workflow_settings['input']['apply_process']:
         status = 'END'
         log.info('All the usefull informations are found. Execute outputs action and end process')

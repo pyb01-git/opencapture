@@ -19,8 +19,8 @@ import re
 import json
 from thefuzz import fuzz
 from src.backend.classes.Files import Files
-from src.backend.functions import search_by_positions, search_custom_positions
 from src.backend.process.find_contact import run_inference
+from src.backend.functions import search_by_positions, search_custom_positions
 
 
 def find_without_civility(splitted_line, name):
