@@ -32,15 +32,17 @@ from datetime import datetime
 from unidecode import unidecode
 from werkzeug.datastructures import FileStorage
 from src.backend.classes.OpenCaptureForMEMWebServices import OpenCaptureForMEMWebServices
+from src.backend.scripting_functions import launch_script_splitter
 
 
-def construct_with_var(data, document_info):
+def construct_with_var(data, document_info, key=None):
     _data = []
     for column in data.split('#'):
         if column in document_info:
             _data.append(str(document_info[column]))
         else:
-            _data.append(column)
+            if not key or not key.startswith('custom_'):
+                _data.append(column)
     return _data
 
 
@@ -367,7 +369,14 @@ class Splitter:
                 self.db.insert(args)
                 page_display_order += 1
 
-            if not workflow_settings[0]['process']['use_interface']:
+            stop_workflow = False
+            if self.config['GLOBAL']['allowwfscripting'].lower() == 'true':
+                args['file'] = file
+                args['batches_id'] = [batch_id]
+                args['custom_id'] = upload_args['custom_id']
+                stop_workflow = launch_script_splitter(workflow_settings[0], self.docservers, 'process', self.log, self.db  , args, self.config, None)
+
+            if not workflow_settings[0]['process']['use_interface'] and not stop_workflow:
                 from src.backend.splitter_exports import export_batch
                 export_batch(batch_id, self.log, self.docservers, upload_args['regex'], self.config, self.db, upload_args['custom_id'])
 
@@ -539,20 +548,34 @@ class Splitter:
 
     @staticmethod
     def export_verifier(batch, metadata, parameters, docservers, regex):
+        from src.backend.controllers import verifier
+
         parameters['body_template'] = re.sub(regex['splitter_xml_comment'], '', parameters['body_template'])
         json_body = json.loads(parameters['body_template'])
-        json_body['files'] = []
 
         if isinstance(json_body['datas'], str):
             json_body['datas'] = ''.join(construct_with_var(json_body['datas'], metadata['custom_fields']))
         elif isinstance(json_body['datas'], dict):
             for sub_key in json_body['datas']:
                 json_body['datas'][sub_key] = ''.join(construct_with_var(json_body['datas'][sub_key],
-                                                                         metadata['custom_fields']))
+                                                                         metadata['custom_fields'], sub_key))
+
+        tmp_json_body = json.loads(parameters['body_template'])
         for document in batch['documents']:
-            for key in json_body['datas']:
-                if json_body['datas'][key] == 'doctype':
+            json_body['files'] = []
+            if isinstance(json_body['datas'], str):
+                json_body['datas'] = ''.join(construct_with_var(tmp_json_body['datas'], document['data']['custom_fields']))
+            elif isinstance(json_body['datas'], dict):
+                for sub_key in json_body['datas']:
+                    json_body['datas'][sub_key] = ''.join(construct_with_var(tmp_json_body['datas'][sub_key],
+                                                                             document['data']['custom_fields'], sub_key))
+
+            for key in tmp_json_body['datas']:
+                if tmp_json_body['datas'][key] == 'doctype':
                     json_body['datas'][key] = document['doctype_key']
+
+                if tmp_json_body['datas'][key] in document['data']['custom_fields']:
+                    json_body['datas'][key] = document['data']['custom_fields'][tmp_json_body['datas'][key]]
 
             pdf_writer = pypdf.PdfWriter()
             with tempfile.NamedTemporaryFile() as tf:
@@ -566,10 +589,9 @@ class Splitter:
                 file = FileStorage(stream=open(tf.name, 'rb'), content_type='application/pdf',
                                    filename=document['doctype_key'] + '_' + str(document['id']) + '.pdf')
                 json_body['files'].append(file)
-
-        json_body['splitter_batch_id'] = batch['id']
-        from src.backend.controllers import verifier
-        return verifier.upload_documents(json_body)
+            json_body['splitter_batch_id'] = batch['id']
+            verifier.upload_documents(json_body)
+        return True, 200
 
     @staticmethod
     def get_split_methods(docservers):

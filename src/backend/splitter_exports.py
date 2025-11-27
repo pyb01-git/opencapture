@@ -38,7 +38,7 @@ def get_output_parameters(parameters):
     return data
 
 
-def export_batch(batch_id, log, docservers, regex, config, database, custom_id):
+def export_batch(batch_id, log, docservers, regex, config, database, custom_id, outputs_list=None):
     export_date = Files.get_now_date()
     export_zip_file = ''
 
@@ -80,20 +80,23 @@ def export_batch(batch_id, log, docservers, regex, config, database, custom_id):
         }
         return response, 400
 
-    if workflow_settings['process']['use_interface']:
-        form, error = forms.get_form_by_id({'form_id': batch['form_id']})
-        if error:
-            response = {
-                "errors": error,
-                "message": batch['form_id']
-            }
-            return response, 400
-
-        outputs_id = form['outputs']
-        export_zip_file = form['settings']['export_zip_file']
+    if outputs_list is not None:
+        outputs_id = outputs_list
     else:
-        outputs_id = workflow_settings['output']['outputs_id']
+        if workflow_settings['process']['use_interface']:
+            form, error = forms.get_form_by_id({'form_id': batch['form_id']})
+            if error:
+                response = {
+                    "errors": error,
+                    "message": batch['form_id']
+                }
+                return response, 400
 
+            outputs_id = form['outputs']
+            export_zip_file = form['settings']['export_zip_file']
+        else:
+            outputs_id = workflow_settings['output']['outputs_id']
+    print(outputs_id)
     for output_id in outputs_id:
         output = outputs.get_output_by_id({'output_id': output_id})
         if not output:

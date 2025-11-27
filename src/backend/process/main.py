@@ -74,7 +74,7 @@ def execute_outputs(output_info, log, regex, document_data, database):
 
 
 def insert(args, files, database, datas, full_jpg_filename, file, original_file, supplier, status, nb_pages, docservers,
-           workflow_settings, log, regex, supplier_lang_different, current_lang, allow_auto):
+           workflow_settings, log, allow_auto):
     try:
         filename = os.path.splitext(files.custom_file_name)
         improved_img = filename[0] + '_improved' + filename[1]
@@ -127,50 +127,6 @@ def insert(args, files, database, datas, full_jpg_filename, file, original_file,
                 })
 
     insert_document = True
-    args['outputs'] = []
-    if status == 'END' and 'form_id' in document_data and document_data['form_id']:
-        outputs = database.select({
-            'select': ['outputs'],
-            'table': ['form_models'],
-            'where': ['id = %s'],
-            'data': [document_data['form_id']]
-        })
-
-        if outputs:
-            args['outputs'] = []
-            for output_id in outputs[0]['outputs']:
-                output_info = database.select({
-                    'select': ['output_type_id', 'data', 'compress_type', 'ocrise'],
-                    'table': ['outputs'],
-                    'where': ['id = %s'],
-                    'data': [output_id]
-                })
-                if output_info and supplier_lang_different:
-                    _regex = database.select({
-                        'select': ['regex_id', 'content'],
-                        'table': ['regex'],
-                        'where': ["lang in ('global', %s)"],
-                        'data': [current_lang]
-                    })
-
-                    for _r in _regex:
-                        regex[_r['regex_id']] = _r['content']
-                args['outputs'].append(execute_outputs(output_info[0], log, regex, document_data, database))
-    elif workflow_settings and (not workflow_settings['process']['use_interface']
-                                or not workflow_settings['input']['apply_process']):
-        if 'output' in workflow_settings and workflow_settings['output']:
-            args['outputs'] = []
-            document_data['status'] = 'NO_INTERFACE'
-            for output_id in workflow_settings['output']['outputs_id']:
-                if output_id:
-                    output_info = database.select({
-                        'select': ['output_type_id', 'data', 'compress_type', 'ocrise'],
-                        'table': ['outputs'],
-                        'where': ['id = %s'],
-                        'data': [output_id]
-                    })
-                    if output_info:
-                        args['outputs'].append(execute_outputs(output_info[0], log, regex, document_data, database))
 
     if workflow_settings:
         document_data['workflow_id'] = workflow_settings['id']
@@ -208,7 +164,6 @@ def insert(args, files, database, datas, full_jpg_filename, file, original_file,
                         'where': ['id = %s'],
                         'data': [attachment['id']]
                     })
-
         return document_id
 
     log.info('Document not inserted in database based on workflow settings')
@@ -441,16 +396,14 @@ def process(args, file, log, config, files, ocr, regex, database, docservers, co
             res = find_workflow_with_ia(file, ai_model_id, database, docservers, Files, ocr, log, 'verifier')
             if res:
                 return send_to_workflow({
-                    'ip': args['ip'],
                     'log': log,
                     'file': file,
-                    'user_info': args['user_info'],
+                    'ip': args['ip'],
                     'workflow_id': res,
+                    'datas': args['datas'],
+                    'user_info': args['user_info'],
                     'custom_id': args['custom_id']
                 })
-
-    # Convert files to JPG
-    convert(file, files, ocr, nb_pages, tesseract_function, convert_function)
 
     supplier = None
     supplier_lang_different = False
@@ -560,6 +513,8 @@ def process(args, file, log, config, files, ocr, regex, database, docservers, co
     if not supplier or not supplier[0] or not supplier[2]:
         if 'customer_id' in workflow_settings['input'] and workflow_settings['input']['customer_id']:
             customer_id = workflow_settings['input']['customer_id']
+
+    convert(file, files, ocr, nb_pages, tesseract_function, convert_function)
 
     if workflow_settings['input']['apply_process']:
         if 'name' in system_fields_to_find or 'contact' in system_fields_to_find :
@@ -952,17 +907,22 @@ def process(args, file, log, config, files, ocr, regex, database, docservers, co
             allow_auto = False
             break
 
-    if (supplier and not supplier[2]['skip_auto_validate'] and allow_auto) or not workflow_settings['input']['apply_process']:
+        if custom_fields_to_find:
+            for field in workflow_settings['process']['custom_fields']:
+                if 'custom_' + str(field) in datas['datas'] and datas['datas']['custom_' + str(field)]:
+                    continue
+                allow_auto = False
+                break
+
+    if (supplier and not supplier[2]['skip_auto_validate']) or allow_auto or not workflow_settings['input']['apply_process']:
         status = 'END'
         log.info('All the usefull informations are found. Execute outputs action and end process')
         document_id = insert(args, files, database, datas, full_jpg_filename, file, original_file, supplier, status,
-                             nb_pages, docservers, workflow_settings, log, regex, supplier_lang_different,
-                             configurations['locale'], allow_auto)
+                             nb_pages, docservers, workflow_settings, log, allow_auto)
     else:
         status = 'NEW'
         document_id = insert(args, files, database, datas, full_jpg_filename, file, original_file, supplier, status,
-                             nb_pages, docservers, workflow_settings, log, regex, supplier_lang_different,
-                             configurations['locale'], allow_auto)
+                             nb_pages, docservers, workflow_settings, log, allow_auto)
 
         if supplier and supplier[2]['skip_auto_validate'] == 'True':
             log.info('Skip automatic validation for this supplier this time')
@@ -980,6 +940,58 @@ def process(args, file, log, config, files, ocr, regex, database, docservers, co
     # Launch process scripting if present
     if config['GLOBAL']['allowwfscripting'].lower() == 'true':
         launch_script_verifier(workflow_settings, docservers, 'process', log, file, database, args, config, datas)
+
+    # Execute outputs if necessary
+    args['outputs'] = []
+    document_data = database.select({
+        'select': ['*'],
+        'table': ['documents'],
+        'where': ['id = %s'],
+        'data': [document_id]
+    })[0]
+    if status == 'END' and 'form_id' in document_data and document_data['form_id']:
+        outputs = database.select({
+            'select': ['outputs'],
+            'table': ['form_models'],
+            'where': ['id = %s'],
+            'data': [document_data['form_id']]
+        })
+
+        if outputs:
+            args['outputs'] = []
+            for output_id in outputs[0]['outputs']:
+                output_info = database.select({
+                    'select': ['output_type_id', 'data', 'compress_type', 'ocrise'],
+                    'table': ['outputs'],
+                    'where': ['id = %s'],
+                    'data': [output_id]
+                })
+                if output_info and supplier_lang_different:
+                    _regex = database.select({
+                        'select': ['regex_id', 'content'],
+                        'table': ['regex'],
+                        'where': ["lang in ('global', %s)"],
+                        'data': [configurations['locale']]
+                    })
+
+                    for _r in _regex:
+                        regex[_r['regex_id']] = _r['content']
+                args['outputs'].append(execute_outputs(output_info[0], log, regex, document_data, database))
+    elif workflow_settings and (not workflow_settings['process']['use_interface']
+                                or not workflow_settings['input']['apply_process']):
+        if 'output' in workflow_settings and workflow_settings['output']:
+            args['outputs'] = []
+            document_data['status'] = 'NO_INTERFACE'
+            for output_id in workflow_settings['output']['outputs_id']:
+                if output_id:
+                    output_info = database.select({
+                        'select': ['output_type_id', 'data', 'compress_type', 'ocrise'],
+                        'table': ['outputs'],
+                        'where': ['id = %s'],
+                        'data': [output_id]
+                    })
+                    if output_info:
+                        args['outputs'].append(execute_outputs(output_info[0], log, regex, document_data, database))
 
     if (status == 'END') or (workflow_settings and (not workflow_settings['process']['use_interface'] or
                                                     not workflow_settings['input']['apply_process'])):

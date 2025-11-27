@@ -87,9 +87,11 @@ def send_to_workflow(args):
         'file': new_file_name,
         'user_info': args['user_info'],
         'custom_id': args['custom_id'],
+        'original_filename': args['file'],
         'workflow_id': args['workflow_id'],
         'current_step': args['log'].current_step,
-        'task_id_monitor': args['log'].task_id_monitor
+        'task_id_monitor': args['log'].task_id_monitor,
+        'datas': args['datas'] if 'datas' in args else {}
     })
 
     if os.path.isfile(args['file']):
@@ -108,8 +110,8 @@ def update_document_data(args):
         if datas and datas[0]:
             datas = datas[0]['datas']
 
-            for new_data in args['data']:
-                datas[new_data] = args['data'][new_data]
+            for new_data in args['datas']:
+                datas[new_data] = args['datas'][new_data]
 
             database.update({
                 'table': ['documents'],
@@ -130,8 +132,8 @@ def update_document_data(args):
             if datas and datas[0]:
                 datas = datas[0]['data']
 
-                for new_data in args['data']:
-                    datas['custom_fields'][new_data] = args['data'][new_data]
+                for new_data in args['datas']:
+                    datas['custom_fields'][new_data] = args['datas'][new_data]
 
                 database.update({
                     'table': ['splitter_batches'],
@@ -141,6 +143,17 @@ def update_document_data(args):
                     'where': ['id = %s'],
                     'data': [batch_id]
                 })
+
+
+def execute_output_splitter(args):
+    database, config, regex, _, _, _, _, _, _, docservers, _, _, _ = create_classes_from_custom_id(args['custom_id'], True)
+    if 'batches_id' in args and args['batches_id']:
+        from src.backend.splitter_exports import export_batch
+        for batch_id in args['batches_id']:
+            export_batch(batch_id, args['log'], docservers, regex, config, database, args['custom_id'], args['outputs'])
+
+        return 'end_workflow'
+    return None
 
 
 def launch_script_verifier(workflow_settings, docservers, step, log, file, database, args, config, datas=None):
@@ -182,6 +195,8 @@ def launch_script_verifier(workflow_settings, docservers, step, log, file, datab
 
                 if step == 'input':
                     data['ip'] = args['ip']
+                    if datas:
+                        data['datas'] = datas
                     data['database'] = database
                     data['user_info'] = args['user_info']
                 elif step in ('process', 'output'):
@@ -232,19 +247,22 @@ def launch_script_splitter(workflow_settings, docservers, step, log, database, a
                 except ModuleNotFoundError:
                     scripting = importlib.import_module(script_name, 'custom')
 
+                data = {}
                 if 'batches_id' in args:
                     batch = database.select({
-                        'select': ['file_path'],
+                        'select': ['*'],
                         'table': ['splitter_batches'],
                         'where': ['id = %s'],
                         'data': [args['batches_id'][0]]
                     })
+                    data = batch[0]['data']
                     file_path = docservers['SPLITTER_ORIGINAL_DOC'] + "/" + batch[0]['file_path']
                 else:
                     file_path = args['file']
 
                 data = {
                     'log': log,
+                    'data': data,
                     'file': file_path,
                     'custom_id': args['custom_id'],
                     'opencapture_path': config['GLOBAL']['applicationpath']
@@ -269,7 +287,7 @@ def launch_script_splitter(workflow_settings, docservers, step, log, database, a
 
                 res = scripting.main(data)
                 os.remove(tmp_file)
-                return change_workflow and res != 'DISABLED'
+                return change_workflow and res != 'DISABLED' or res == 'stop_workflow'
         except (Exception,):
            log.error('Error during ' + step + ' scripting : ' + str(traceback.format_exc()))
            os.remove(tmp_file)
