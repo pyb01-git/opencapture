@@ -14,6 +14,7 @@
 # See LICENCE file at the root folder for more details.
 
 # @dev : Nathan Cheval <nathan.cheval@outlook.fr>
+# @dev: Serena tetart <serena.tetart@edissyum.com>
 
 import json
 import torch
@@ -21,71 +22,6 @@ import transformers
 import qwen_vl_utils
 from flask import current_app
 from src.backend.controllers import accounts
-
-def run_inference(image):
-    model_path = current_app.config['CONTACT_MODEL']
-    model = transformers.Qwen2VLForConditionalGeneration.from_pretrained(
-        model_path,
-        device_map=None,
-        dtype=torch.float32
-    )
-    model = torch.compile(model)
-    model.eval()
-
-    processor = transformers.AutoProcessor.from_pretrained(
-        model_path,
-        use_fast=True,
-        min_pixels=512 * 28 * 28,
-        max_pixels=512 * 28 * 28
-    )
-
-    with torch.inference_mode():
-        with torch.no_grad():
-            formatted_data = [
-                {
-                    "role": "user",
-                    "content": [
-                        {"type": "image", "image": image.convert('RGB')},
-                        {"type": "text", "text": "Extract sender's data in a python dictionary"},
-                    ],
-                }
-            ]
-
-            chat_text = processor.apply_chat_template(
-                formatted_data,
-                tokenize=False,
-                add_generation_prompt=True
-            )
-            model_inputs = processor(
-                padding=True,
-                text=[chat_text],
-                return_tensors="pt",
-                images=[qwen_vl_utils.process_vision_info(formatted_data)[0]]
-            )
-
-            input_ids = model_inputs["input_ids"].to(model.device)
-            generated_ids = model.generate(
-                input_ids=input_ids,
-                max_new_tokens=256,
-                pixel_values=model_inputs["pixel_values"].to(model.device),
-                attention_mask=model_inputs["attention_mask"].to(model.device),
-                image_grid_thw=model_inputs["image_grid_thw"].to(model.device)
-            )
-
-            generated_ids_trimmed = [
-                out_ids[len(in_ids):]
-                for in_ids, out_ids in zip(input_ids, generated_ids)
-            ]
-            generated_texts = processor.batch_decode(
-                generated_ids_trimmed,
-                skip_special_tokens=True,
-                clean_up_tokenization_spaces=False
-            )
-
-            data = {}
-            if generated_texts and isinstance(generated_texts[0], str):
-                data = json.loads(generated_texts[0])
-            return data
 
 class FindContact:
     def __init__(self, ocr, log, regex, files, database, file, image, customer_id):
@@ -98,6 +34,113 @@ class FindContact:
         self.image = image
         self.database = database
         self.customer_id = customer_id
+
+    def parse_output(self, output: str):
+        final_dict = {}
+        key_dict = ""
+        sep_bool = True
+        i = 0
+        L = len(output)
+        while i < L:
+            if output[i] == "<":
+                if output.startswith("<SEP>", i):
+                    i += 5
+                    sep_bool = True
+                    continue
+                else:
+                    sep_bool = False
+                    i += 1
+                    key_dict = ""
+                    while i < L and output[i] != ">":
+                        key_dict += output[i]; i += 1
+            elif output[i] == ">":
+                i += 1
+                value_dict = ""
+                while i < L and output[i] != "<":
+                    c = output[i]
+                    if c not in "\n[]":
+                        value_dict += c
+                    i += 1
+                key_name = key_dict[2:].lower()
+                if not sep_bool:
+                    final_dict[key_name] = value_dict
+                elif key_dict == "K_PHONE":
+                    cur = final_dict.get(key_name, [])
+                    if not isinstance(cur, list):
+                        cur = [cur]
+                    cur.append(value_dict)
+                    final_dict[key_name] = cur
+            else:
+                i += 1
+        return final_dict
+
+
+    def run_inference(self):
+        model_path = current_app.config['CONTACT_MODEL']
+        model = transformers.Qwen2VLForConditionalGeneration.from_pretrained(
+            model_path,
+            device_map=None,
+            dtype=torch.float32
+        )
+        model.eval()
+
+        processor = transformers.AutoProcessor.from_pretrained(
+            model_path,
+            use_fast=True,
+            min_pixels=512 * 28 * 28,
+            max_pixels=512 * 28 * 28
+        )
+
+        data = {}
+        with torch.inference_mode():
+            with torch.no_grad():
+                formatted_data = [
+                    {
+                        "role": "user",
+                        "content": [
+                            {"type": "image", "image": self.image.convert('RGB')},
+                            {"type": "text", "text": "Extract sender's data in a python dictionary"},
+                        ],
+                    }
+                ]
+
+                chat_text = processor.apply_chat_template(
+                    formatted_data,
+                    tokenize=False,
+                    add_generation_prompt=True
+                )
+                model_inputs = processor(
+                    padding=True,
+                    text=[chat_text],
+                    return_tensors="pt",
+                    images=[qwen_vl_utils.process_vision_info(formatted_data)[0]]
+                )
+
+                input_ids = model_inputs["input_ids"].to(model.device)
+                generated_ids = model.generate(
+                    input_ids=input_ids,
+                    max_new_tokens=256,
+                    pixel_values=model_inputs["pixel_values"].to(model.device),
+                    attention_mask=model_inputs["attention_mask"].to(model.device),
+                    image_grid_thw=model_inputs["image_grid_thw"].to(model.device)
+                )
+
+                generated_ids_trimmed = [
+                    out_ids[len(in_ids):]
+                    for in_ids, out_ids in zip(input_ids, generated_ids)
+                ]
+                generated_texts = processor.batch_decode(
+                    generated_ids_trimmed,
+                    skip_special_tokens=False,
+                    clean_up_tokenization_spaces=False
+                )
+
+                response = (generated_texts[0])[1:-11]
+                data = self.parse_output(response)
+                
+                if data and isinstance(data, str):
+                    data = json.loads(data)
+        return data
 
 
     def search_contact(self, data_name, data_value):
@@ -133,7 +176,7 @@ class FindContact:
             self.log.info('No contact model configured, skipping contact search/creation')
             return None
 
-        contact_data = run_inference(self.image)
+        contact_data = self.run_inference()
         if 'email' in contact_data:
             contact = self.search_contact('email', contact_data['email'])
             if contact:
