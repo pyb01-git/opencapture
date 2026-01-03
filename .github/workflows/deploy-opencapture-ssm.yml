@@ -52,7 +52,7 @@ jobs:
               "set -eux",
               "mkdir -p /opt/opencapture",
               "cat << '\''EOF'\'' > /opt/opencapture/deploy.sh",
-              "'"$(sed 's/"/\\"/g' scripts/deploy-opencapture.sh)"'",
+              "'"$(sed 's/"/\\"/g' deploy/deploy-opencapture.sh)"'",
               "EOF",
               "chmod +x /opt/opencapture/deploy.sh",
               "/opt/opencapture/deploy.sh"
