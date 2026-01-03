@@ -33,7 +33,7 @@ jobs:
           GITHUB_HEAD_REF: ${{ github.head_ref }}
         run: |
           INSTANCE_ID=$(aws ec2 describe-instances \
-            --filters "Name=tag:Name,Values=opencapture" \
+            --filters "Name=tag:Name,Values=OpenCapture-EC2" \
             --query "Reservations[0].Instances[0].InstanceId" \
             --output text)
 
@@ -41,4 +41,4 @@ jobs:
             --targets "Key=instanceIds,Values=$INSTANCE_ID" \
             --document-name "AWS-RunShellScript" \
             --comment "Deploy OpenCapture via SSM" \
-            --parameters "commands=['/var/www/html/opencapture/scripts/deploy-opencapture.sh']"
+            --parameters "commands=['/var/www/html/opencapture/deploy/deploy-opencapture.sh']"
