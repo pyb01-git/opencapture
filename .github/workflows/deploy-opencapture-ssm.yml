@@ -1,3 +1,4 @@
+---
 - name: Deploy OpenCapture via SSM
   env:
     HOST_NAME: ${{ secrets.HOST_NAME }}

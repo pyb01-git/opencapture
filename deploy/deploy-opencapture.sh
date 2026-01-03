@@ -25,7 +25,7 @@ sed -i 's/$(tput bold)/""/gI' install.sh
 sed -i 's/$(tput sgr0)/""/gI' install.sh
 
 sudo apt install -y postgresql
-sudo su postgres -c "psql -c 'DROP DATABASE IF EXISTS opencapture_test'"
+sudo su - postgres -c "psql -c 'DROP DATABASE IF EXISTS opencapture_test'"
 sudo ./install.sh --custom_id test \
                    --user $(whoami) \
                    --path /var/www/html/opencapture/ \
