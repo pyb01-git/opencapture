@@ -116,4 +116,4 @@ jobs:
             --document-name "AWS-RunShellScript" \
             --comment "Deploy OpenCapture" \
             --parameters 'commands=["/home/opencapture/deploy.sh"]' \
-            --region eu-west-1
+            --region eu-west-3
