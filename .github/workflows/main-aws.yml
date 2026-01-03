@@ -1,4 +1,4 @@
-name: OpenCapture CI/CD
+name: OpenCapture CI/CD V2
 
 on:
   push:
@@ -46,10 +46,59 @@ jobs:
           ng build --prod
       - name: Package backend
         run: python setup.py bdist_wheel
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: build-artifacts
+          path: |
+            frontend/dist/
+            dist/
+
+  security-scan-ia:
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - uses: actions/checkout@v3
+      - name: Install gitleaks
+        run: |
+          curl -sL https://github.com/zricethezav/gitleaks/releases/latest/download/gitleaks-linux-amd64 -o gitleaks
+          chmod +x gitleaks
+      - name: Run gitleaks scan
+        run: |
+          ./gitleaks detect --source=. --report=gitleaks-report.json --report-format=json
+      - name: Upload report
+        uses: actions/upload-artifact@v3
+        with:
+          name: gitleaks-report
+          path: gitleaks-report.json
+
+  security-scan-iam:
+    runs-on: ubuntu-latest
+    needs: build
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: aws-actions/configure-aws-credentials@v2
+        with:
+          role-to-assume: arn:aws:iam::123456789012:role/github-actions-opencapture-deploy
+          aws-region: eu-west-1
+      - name: List IAM policies attached
+        run: |
+          aws iam list-attached-role-policies --role-name github-actions-opencapture-deploy > iam-policies.json
+      - name: Evaluate IAM permissions
+        run: |
+          # Script Python/Bash pour vérifier que pas de "*:*" ni accès SecretsManager
+          python scripts/check_iam_permissions.py iam-policies.json
+      - name: Upload report
+        uses: actions/upload-artifact@v3
+        with:
+          name: iam-report
+          path: iam-policies.json
 
   deploy:
     runs-on: ubuntu-latest
-    needs: build
+    needs: [build, security-scan-ia, security-scan-iam]
     permissions:
       id-token: write
       contents: read
