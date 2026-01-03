@@ -3,6 +3,8 @@ name: OpenCapture Deployment via SSM
 on:
   pull_request:
     branches: [ master ]
+  push:
+    branches: [ master ]
 
 jobs:
   deploy-opencapture:
