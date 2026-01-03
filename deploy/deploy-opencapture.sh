@@ -49,6 +49,8 @@ cd /var/www/html/opencapture/
 python3 -m unittest discover src/backend/tests/
 sudo su postgres -c "psql -c 'drop database opencapture_test'"
 
+exit 0
+
 # 6️⃣ Cleanup
 sudo rm -rf /var/www/html/opencapture/
 sudo rm -rf /var/docservers/
