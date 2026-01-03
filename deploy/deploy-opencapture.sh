@@ -10,7 +10,7 @@ sudo rm -rf /home/$(whoami)/python-venv/opencapture/
 
 sudo apt update -y
 sudo apt install -y git crudini
-git clone -b $GITHUB_HEAD_REF https://github.com/edissyum/opencapture/ /var/www/html/opencapture/
+git clone -b $GITHUB_HEAD_REF https://github.com/pyb01-git/opencapture.git /var/www/html/opencapture/
 
 # 2️⃣ Frontend
 sudo apt install -y nodejs npm apache2
