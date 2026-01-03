@@ -13,7 +13,7 @@ sudo apt install -y git crudini
 git clone -b $GITHUB_HEAD_REF https://github.com/edissyum/opencapture/ /var/www/html/opencapture/
 
 # 2️⃣ Frontend
-sudo apt install -y nodejs npm
+sudo apt install -y nodejs npm apache2
 cd /var/www/html/opencapture/src/frontend/
 npm run reload-packages
 npm run build-prod
