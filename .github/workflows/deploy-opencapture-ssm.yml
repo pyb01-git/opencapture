@@ -35,4 +35,4 @@ jobs:
             --targets "Key=instanceIds,Values=$INSTANCE_ID" \
             --document-name "AWS-RunShellScript" \
             --comment "Deploy OpenCapture via SSM" \
-            --parameters "commands=['/var/www/html/opencapture/deploy-opencapture.sh']"
+            --parameters "commands=['/var/www/html/opencapture/deploy/deploy-opencapture.sh']"
