@@ -24,10 +24,16 @@ jobs:
           role-to-assume: arn:aws:iam::029373388248:role/github-actions-opencapture-deploy
           aws-region: eu-west-3
 
-      - name: Deploy on EC2 via SSM
+      - name: Deploy OpenCapture via SSM
+        env:
+          HOST_NAME: ${{ secrets.HOST_NAME }}
+          PORT: ${{ secrets.PORT }}
+          USER_NAME: ${{ secrets.USER_NAME }}
+          USER_PASSWORD: ${{ secrets.USER_PASSWORD }}
+          GITHUB_HEAD_REF: ${{ github.head_ref }}
         run: |
           INSTANCE_ID=$(aws ec2 describe-instances \
-            --filters "Name=tag:Name,Values=OpenCapture-EC2" \
+            --filters "Name=tag:Name,Values=opencapture" \
             --query "Reservations[0].Instances[0].InstanceId" \
             --output text)
 
@@ -35,4 +41,4 @@ jobs:
             --targets "Key=instanceIds,Values=$INSTANCE_ID" \
             --document-name "AWS-RunShellScript" \
             --comment "Deploy OpenCapture via SSM" \
-            --parameters "commands=['/var/www/html/opencapture/deploy/deploy-opencapture.sh']"
+            --parameters "commands=['/var/www/html/opencapture/scripts/deploy-opencapture.sh']"
