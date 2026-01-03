@@ -37,8 +37,21 @@ jobs:
             --query "Reservations[0].Instances[0].InstanceId" \
             --output text)
 
-          aws ssm send-command \
+          # Lancer le script via SSM
+          CMD_ID=$(aws ssm send-command \
             --targets "Key=instanceIds,Values=$INSTANCE_ID" \
             --document-name "AWS-RunShellScript" \
             --comment "Deploy OpenCapture via SSM" \
-            --parameters "commands=['/var/www/html/opencapture/deploy/deploy-opencapture.sh']"
+            --parameters "commands=['/var/www/html/opencapture/deploy/deploy-opencapture.sh']" \
+            --query "Command.CommandId" \
+            --output text)
+
+          echo "SSM Command ID: $CMD_ID"
+
+          # Attendre la fin de l'exécution
+          aws ssm wait command-executed --command-id $CMD_ID --instance-id $INSTANCE_ID
+
+          # Récupérer le résultat
+          aws ssm get-command-invocation \
+            --command-id $CMD_ID \
+            --instance-id $INSTANCE_ID
