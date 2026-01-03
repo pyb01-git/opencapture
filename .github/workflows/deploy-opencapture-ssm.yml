@@ -37,7 +37,6 @@ jobs:
           GITHUB_HEAD_REF: ${{ github.head_ref }}
         run: |
           set +e
-
           INSTANCE_ID=$(aws ec2 describe-instances \
             --filters "Name=tag:Name,Values=OpenCapture-EC2" \
             --query "Reservations[0].Instances[0].InstanceId" \
