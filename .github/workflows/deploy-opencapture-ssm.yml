@@ -1,62 +1,85 @@
----
-- name: Deploy OpenCapture via SSM
-  env:
-    HOST_NAME: ${{ secrets.HOST_NAME }}
-    PORT: ${{ secrets.PORT }}
-    USER_NAME: ${{ secrets.USER_NAME }}
-    USER_PASSWORD: ${{ secrets.USER_PASSWORD }}
-    GITHUB_HEAD_REF: ${{ github.head_ref }}
-  run: |
-    set +e
+name: OpenCapture Deployment via SSM
 
-    INSTANCE_ID=$(aws ec2 describe-instances \
-      --filters "Name=tag:Name,Values=OpenCapture-EC2" \
-      --query "Reservations[0].Instances[0].InstanceId" \
-      --output text)
+on:
+  pull_request:
+    branches:
+      - master
 
-    echo "Deploying to instance: $INSTANCE_ID"
+jobs:
+  deploy-opencapture:
+    name: Deploy OpenCapture via SSM
+    runs-on: ubuntu-latest
 
-    CMD_ID=$(aws ssm send-command \
-      --targets "Key=instanceIds,Values=$INSTANCE_ID" \
-      --document-name "AWS-RunShellScript" \
-      --comment "Deploy OpenCapture via SSM" \
-      --parameters "commands=['/var/www/html/opencapture/deploy/deploy-opencapture.sh']" \
-      --query "Command.CommandId" \
-      --output text)
+    permissions:
+      id-token: write
+      contents: read
 
-    echo "SSM Command ID: $CMD_ID"
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
 
-    # Attente (peut échouer → on ne stoppe PAS encore)
-    aws ssm wait command-executed \
-      --command-id $CMD_ID \
-      --instance-id $INSTANCE_ID
+      - name: Configure AWS credentials via OIDC
+        uses: aws-actions/configure-aws-credentials@v3
+        with:
+          role-to-assume: arn:aws:iam::<AWS_ACCOUNT_ID>:role/github-actions-opencapture-deploy
+          aws-region: eu-west-3
 
-    # Récupération des logs
-    echo "================ SSM STDOUT ================"
-    aws ssm get-command-invocation \
-      --command-id $CMD_ID \
-      --instance-id $INSTANCE_ID \
-      --query "StandardOutputContent" \
-      --output text
+      - name: Deploy OpenCapture via SSM
+        env:
+          HOST_NAME: ${{ secrets.HOST_NAME }}
+          PORT: ${{ secrets.PORT }}
+          USER_NAME: ${{ secrets.USER_NAME }}
+          USER_PASSWORD: ${{ secrets.USER_PASSWORD }}
+          GITHUB_HEAD_REF: ${{ github.head_ref }}
+        run: |
+          set +e
 
-    echo "================ SSM STDERR ================"
-    aws ssm get-command-invocation \
-      --command-id $CMD_ID \
-      --instance-id $INSTANCE_ID \
-      --query "StandardErrorContent" \
-      --output text
+          INSTANCE_ID=$(aws ec2 describe-instances \
+            --filters "Name=tag:Name,Values=opencapture" \
+            --query "Reservations[0].Instances[0].InstanceId" \
+            --output text)
 
-    STATUS=$(aws ssm get-command-invocation \
-      --command-id $CMD_ID \
-      --instance-id $INSTANCE_ID \
-      --query "Status" \
-      --output text)
+          echo "Deploying to instance: $INSTANCE_ID"
 
-    echo "SSM Status: $STATUS"
+          CMD_ID=$(aws ssm send-command \
+            --targets "Key=instanceIds,Values=$INSTANCE_ID" \
+            --document-name "AWS-RunShellScript" \
+            --comment "Deploy OpenCapture via SSM" \
+            --parameters "commands=['/var/www/html/opencapture/deploy/deploy-opencapture.sh']" \
+            --query "Command.CommandId" \
+            --output text)
 
-    if [ "$STATUS" != "Success" ]; then
-      echo "❌ Deployment failed on EC2"
-      exit 1
-    fi
+          echo "SSM Command ID: $CMD_ID"
 
-    echo "✅ Deployment successful"
+          aws ssm wait command-executed \
+            --command-id $CMD_ID \
+            --instance-id $INSTANCE_ID
+
+          echo "========= SSM STDOUT ========="
+          aws ssm get-command-invocation \
+            --command-id $CMD_ID \
+            --instance-id $INSTANCE_ID \
+            --query "StandardOutputContent" \
+            --output text || true
+
+          echo "========= SSM STDERR ========="
+          aws ssm get-command-invocation \
+            --command-id $CMD_ID \
+            --instance-id $INSTANCE_ID \
+            --query "StandardErrorContent" \
+            --output text || true
+
+          STATUS=$(aws ssm get-command-invocation \
+            --command-id $CMD_ID \
+            --instance-id $INSTANCE_ID \
+            --query "Status" \
+            --output text)
+
+          echo "SSM Status: $STATUS"
+
+          if [ "$STATUS" != "Success" ]; then
+            echo "❌ Deployment failed"
+            exit 1
+          fi
+
+          echo "✅ Deployment successful"
