@@ -1,0 +1,36 @@
+name: Deploy OpenCapture via SSM
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Configure AWS credentials via OIDC
+      uses: aws-actions/configure-aws-credentials@v3
+      with:
+        role-to-assume: arn:aws:iam::029373388248:role/github-actions-opencapture-deploy
+        aws-region: eu-west-3
+
+    - name: Deploy OpenCapture via SSM
+      run: |
+        INSTANCE_ID=$(aws ec2 describe-instances \
+          --filters "Name=tag:Name,Values=opencapture" \
+          --query "Reservations[0].Instances[0].InstanceId" \
+          --output text)
+
+        aws ssm send-command \
+          --targets "Key=instanceIds,Values=$INSTANCE_ID" \
+          --document-name "AWS-RunShellScript" \
+          --comment "Deploy OpenCapture MCP bootstrap" \
+          --parameters 'commands=["echo Hello OpenCapture", "whoami"]'
