@@ -24,7 +24,7 @@ jobs:
 
       - name: Deploy on EC2 via SSM
         run: |
-          # Récupère l'instance EC2 par tag Name
+          # Récupère l'instance EC2 par tag Name 
           INSTANCE_ID=$(aws ec2 describe-instances \
             --filters "Name=tag:Name,Values=opencapture" \
             --query "Reservations[0].Instances[0].InstanceId" \
