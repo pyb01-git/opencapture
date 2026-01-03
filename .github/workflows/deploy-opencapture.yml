@@ -1,36 +1,61 @@
-name: Deploy OpenCapture via SSM
+- name: Deploy OpenCapture via SSM
+  env:
+    HOST_NAME: ${{ secrets.HOST_NAME }}
+    PORT: ${{ secrets.PORT }}
+    USER_NAME: ${{ secrets.USER_NAME }}
+    USER_PASSWORD: ${{ secrets.USER_PASSWORD }}
+    GITHUB_HEAD_REF: ${{ github.head_ref }}
+  run: |
+    set +e
 
-on:
-  push:
-    branches:
-      - master
+    INSTANCE_ID=$(aws ec2 describe-instances \
+      --filters "Name=tag:Name,Values=opencapture" \
+      --query "Reservations[0].Instances[0].InstanceId" \
+      --output text)
 
-jobs:
-  deploy:
-    runs-on: ubuntu-latest
-    permissions:
-      id-token: write
-      contents: read
+    echo "Deploying to instance: $INSTANCE_ID"
 
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v3
+    CMD_ID=$(aws ssm send-command \
+      --targets "Key=instanceIds,Values=$INSTANCE_ID" \
+      --document-name "AWS-RunShellScript" \
+      --comment "Deploy OpenCapture via SSM" \
+      --parameters "commands=['/var/www/html/opencapture/deploy/deploy-opencapture.sh']" \
+      --query "Command.CommandId" \
+      --output text)
 
-    - name: Configure AWS credentials via OIDC
-      uses: aws-actions/configure-aws-credentials@v3
-      with:
-        role-to-assume: arn:aws:iam::029373388248:role/github-actions-opencapture-deploy
-        aws-region: eu-west-3
+    echo "SSM Command ID: $CMD_ID"
 
-    - name: Deploy OpenCapture via SSM
-      run: |
-        INSTANCE_ID=$(aws ec2 describe-instances \
-          --filters "Name=tag:Name,Values=OpenCapture-EC2" \
-          --query "Reservations[0].Instances[0].InstanceId" \
-          --output text)
+    # Attente (peut échouer → on ne stoppe PAS encore)
+    aws ssm wait command-executed \
+      --command-id $CMD_ID \
+      --instance-id $INSTANCE_ID
 
-        aws ssm send-command \
-          --targets "Key=instanceIds,Values=$INSTANCE_ID" \
-          --document-name "AWS-RunShellScript" \
-          --comment "Deploy OpenCapture MCP bootstrap" \
-          --parameters 'commands=["echo Hello OpenCapture", "whoami"]'
+    # Récupération des logs
+    echo "================ SSM STDOUT ================"
+    aws ssm get-command-invocation \
+      --command-id $CMD_ID \
+      --instance-id $INSTANCE_ID \
+      --query "StandardOutputContent" \
+      --output text
+
+    echo "================ SSM STDERR ================"
+    aws ssm get-command-invocation \
+      --command-id $CMD_ID \
+      --instance-id $INSTANCE_ID \
+      --query "StandardErrorContent" \
+      --output text
+
+    STATUS=$(aws ssm get-command-invocation \
+      --command-id $CMD_ID \
+      --instance-id $INSTANCE_ID \
+      --query "Status" \
+      --output text)
+
+    echo "SSM Status: $STATUS"
+
+    if [ "$STATUS" != "Success" ]; then
+      echo "❌ Deployment failed on EC2"
+      exit 1
+    fi
+
+    echo "✅ Deployment successful"
