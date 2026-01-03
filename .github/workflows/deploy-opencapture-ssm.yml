@@ -29,65 +29,65 @@ jobs:
           aws-region: eu-west-3
 
       - name: Deploy OpenCapture via SSM
-  env:
-    HOST_NAME: ${{ secrets.HOST_NAME }}
-    PORT: ${{ secrets.PORT }}
-    USER_NAME: ${{ secrets.USER_NAME }}
-    USER_PASSWORD: ${{ secrets.USER_PASSWORD }}
-    GITHUB_HEAD_REF: ${{ github.head_ref }}
-  run: |
-    set +e
+        env:
+          HOST_NAME: ${{ secrets.HOST_NAME }}
+          PORT: ${{ secrets.PORT }}
+          USER_NAME: ${{ secrets.USER_NAME }}
+          USER_PASSWORD: ${{ secrets.USER_PASSWORD }}
+          GITHUB_HEAD_REF: ${{ github.head_ref }}
+        run: |
+          set +e
 
-    INSTANCE_ID=$(aws ec2 describe-instances \
-      --filters "Name=tag:Name,Values=OpenCapture-EC2" \
-      --query "Reservations[0].Instances[0].InstanceId" \
-      --output text)
+          INSTANCE_ID=$(aws ec2 describe-instances \
+            --filters "Name=tag:Name,Values=OpenCapture-EC2" \
+            --query "Reservations[0].Instances[0].InstanceId" \
+            --output text)
 
-    echo "Deploying to instance: $INSTANCE_ID"
+          echo "Deploying to instance: $INSTANCE_ID"
 
-    CMD_ID=$(aws ssm send-command \
-      --targets "Key=instanceIds,Values=$INSTANCE_ID" \
-      --document-name "AWS-RunShellScript" \
-      --comment "Deploy OpenCapture via SSM" \
-      --parameters 'commands=[
-        "set -eux",
-        "mkdir -p /opt/opencapture",
-        "cat << '\''EOF'\'' > /opt/opencapture/deploy.sh",
-        "'"$(sed 's/"/\\"/g' scripts/deploy-opencapture.sh)"'",
-        "EOF",
-        "chmod +x /opt/opencapture/deploy.sh",
-        "/opt/opencapture/deploy.sh"
-      ]' \
-      --query "Command.CommandId" \
-      --output text)
+          CMD_ID=$(aws ssm send-command \
+            --targets "Key=instanceIds,Values=$INSTANCE_ID" \
+            --document-name "AWS-RunShellScript" \
+            --comment "Deploy OpenCapture via SSM" \
+            --parameters 'commands=[
+              "set -eux",
+              "mkdir -p /opt/opencapture",
+              "cat << '\''EOF'\'' > /opt/opencapture/deploy.sh",
+              "'"$(sed 's/"/\\"/g' scripts/deploy-opencapture.sh)"'",
+              "EOF",
+              "chmod +x /opt/opencapture/deploy.sh",
+              "/opt/opencapture/deploy.sh"
+            ]' \
+            --query "Command.CommandId" \
+            --output text)
 
-    echo "SSM Command ID: $CMD_ID"
+          echo "SSM Command ID: $CMD_ID"
 
-    aws ssm wait command-executed \
-      --command-id $CMD_ID \
-      --instance-id $INSTANCE_ID
+          aws ssm wait command-executed \
+            --command-id $CMD_ID \
+            --instance-id $INSTANCE_ID
 
-    aws ssm get-command-invocation \
-      --command-id $CMD_ID \
-      --instance-id $INSTANCE_ID \
-      --query "StandardOutputContent" \
-      --output text || true
+          aws ssm get-command-invocation \
+            --command-id $CMD_ID \
+            --instance-id $INSTANCE_ID \
+            --query "StandardOutputContent" \
+            --output text || true
 
-    aws ssm get-command-invocation \
-      --command-id $CMD_ID \
-      --instance-id $INSTANCE_ID \
-      --query "StandardErrorContent" \
-      --output text || true
+          aws ssm get-command-invocation \
+            --command-id $CMD_ID \
+            --instance-id $INSTANCE_ID \
+            --query "StandardErrorContent" \
+            --output text || true
 
-    STATUS=$(aws ssm get-command-invocation \
-      --command-id $CMD_ID \
-      --instance-id $INSTANCE_ID \
-      --query "Status" \
-      --output text)
+          STATUS=$(aws ssm get-command-invocation \
+            --command-id $CMD_ID \
+            --instance-id $INSTANCE_ID \
+            --query "Status" \
+            --output text)
 
-    if [ "$STATUS" != "Success" ]; then
-      echo "❌ Deployment failed"
-      exit 1
-    fi
+          if [ "$STATUS" != "Success" ]; then
+            echo "❌ Deployment failed"
+            exit 1
+          fi
 
-    echo "✅ Deployment successful"
+          echo "✅ Deployment successful"
