@@ -1,0 +1,114 @@
+name: OpenCapture Deployment via SSM
+
+on:
+  pull_request:
+    branches: [ master ]
+
+jobs:
+  deploy-opencapture:
+    name: Deploy OpenCapture via SSM
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+      - name: Checkout source code
+        uses: actions/checkout@v3
+
+      - name: Configure AWS credentials via OIDC
+        uses: aws-actions/configure-aws-credentials@v3
+        with:
+          role-to-assume: arn:aws:iam::<AWS_ACCOUNT_ID>:role/github-actions-opencapture-deploy
+          aws-region: eu-west-3
+
+      - name: Deploy on EC2 via SSM
+        run: |
+          # Récupère l'instance EC2 par tag Name
+          INSTANCE_ID=$(aws ec2 describe-instances \
+            --filters "Name=tag:Name,Values=opencapture" \
+            --query "Reservations[0].Instances[0].InstanceId" \
+            --output text)
+
+          # Construction des commandes SSM multi-lignes
+          COMMANDS=$(cat <<'EOC'
+# -----------------------
+# 1️⃣ Application retrieval
+# -----------------------
+sudo rm -rf /var/www/html/opencapture/
+sudo mkdir -p /var/www/html/opencapture/
+sudo chmod -R 775 /var/www/html/opencapture/
+sudo chown -R $(whoami):$(whoami) /var/www/html/opencapture/
+sudo rm -rf /home/$(whoami)/python-venv/opencapture/
+
+sudo apt update -y
+sudo apt install -y git crudini
+
+git clone -b $GITHUB_HEAD_REF https://github.com/edissyum/opencapture/ /var/www/html/opencapture/
+
+# -----------------------
+# 2️⃣ Frontend deployment
+# -----------------------
+sudo apt install -y nodejs npm
+cd /var/www/html/opencapture/src/frontend/
+npm run reload-packages
+npm run build-prod
+
+# -----------------------
+# 3️⃣ Backend deployment
+# -----------------------
+cd /var/www/html/opencapture/install/
+chmod u+x install.sh
+sed -i 's/$(tput bold)/""/gI' install.sh
+sed -i 's/$(tput sgr0)/""/gI' install.sh
+
+sudo apt install -y postgresql
+sudo su postgres -c "psql -c 'DROP DATABASE IF EXISTS opencapture_test'"
+
+sudo ./install.sh --custom_id test \
+                   --user $(whoami) \
+                   --path /var/www/html/opencapture/ \
+                   --wsgi_process 1 \
+                   --wsgi_threads 5 \
+                   --supervisor_systemd systemd \
+                   --database_hostname $HOST_NAME \
+                   --database_port $PORT \
+                   --database_username $USER_NAME \
+                   --database_password $USER_PASSWORD
+
+# -----------------------
+# 4️⃣ Post-install checks
+# -----------------------
+sudo systemctl status OCSplitter-worker_test.service
+sudo systemctl status OCVerifier-worker_test.service
+sudo systemctl start postgresql
+sudo systemctl status postgresql
+
+# -----------------------
+# 5️⃣ Backend tests
+# -----------------------
+source /home/$(whoami)/python-venv/opencapture/bin/activate
+cd /var/www/html/opencapture/
+python3 -m unittest discover src/backend/tests/
+
+sudo su postgres -c "psql -c 'drop database opencapture_test'"
+
+# -----------------------
+# 6️⃣ Cleanup
+# -----------------------
+sudo rm -rf /var/www/html/opencapture/
+sudo rm -rf /var/docservers/
+sudo rm -f /etc/apache2/sites-available/opencapture.conf
+sudo rm -f /etc/systemd/system/OCVerifier-worker_test.conf
+sudo rm -f /etc/systemd/system/OCSplitter-worker_test.conf
+sudo systemctl daemon-reload
+sudo systemctl restart apache2
+EOC
+)
+
+          # Exécution via SSM
+          aws ssm send-command \
+            --targets "Key=instanceIds,Values=$INSTANCE_ID" \
+            --document-name "AWS-RunShellScript" \
+            --comment "Full OpenCapture deployment via SSM" \
+            --parameters commands="$COMMANDS"
