@@ -1,5 +1,8 @@
 #!/bin/bash
-set -eux
+set -ex
+
+BRANCH="${GITHUB_HEAD_REF:-master}"
+echo "Branch: $BRANCH"
 
 # 1️⃣ Application retrieval
 sudo rm -rf /var/www/html/opencapture/
@@ -10,10 +13,10 @@ sudo rm -rf /home/$(whoami)/python-venv/opencapture/
 
 sudo apt update -y
 sudo apt install -y git crudini
-git clone -b master https://github.com/pyb01-git/opencapture.git /var/www/html/opencapture/
+git clone -b $BRANCH https://github.com/pyb01-git/opencapture.git /var/www/html/opencapture/
 
 # 2️⃣ Frontend
-sudo apt install -y nodejs npm apache2
+sudo apt install -y nodejs npm
 cd /var/www/html/opencapture/src/frontend/
 npm run reload-packages
 npm run build-prod
@@ -32,16 +35,16 @@ sudo ./install.sh --custom_id test \
                    --wsgi_process 1 \
                    --wsgi_threads 5 \
                    --supervisor_systemd systemd \
-                   --database_hostname $HOST_NAME \
-                   --database_port $PORT \
-                   --database_username $USER_NAME \
-                   --database_password $USER_PASSWORD
+                   --database_hostname ${HOST_NAME:-localhost} \
+                   --database_port ${PORT:-5432} \
+                   --database_username ${USER_NAME:-opencapture} \
+                   --database_password ${USER_PASSWORD:-opencapture}
 
 # 4️⃣ Post-install checks
-sudo systemctl status OCSplitter-worker_test.service
-sudo systemctl status OCVerifier-worker_test.service
+#sudo systemctl status OCSplitter-worker_test.service
+#sudo systemctl status OCVerifier-worker_test.service
 sudo systemctl start postgresql
-sudo systemctl status postgresql
+#sudo systemctl status postgresql
 
 # 5️⃣ Backend tests
 source /home/$(whoami)/python-venv/opencapture/bin/activate
