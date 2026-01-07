@@ -71,8 +71,8 @@ jobs:
             STATUS=$(aws ssm get-command-invocation \
               --command-id "$CMD_ID" \
               --instance-id "$INSTANCE_ID" \
-              --query "Status" \
-              --output text)
+              --query "{stdout:StandardOutputContent,stderr:StandardErrorContent,status:Status}" \
+              --output json)
 
             echo "SSM Status: $STATUS"
 
@@ -81,15 +81,8 @@ jobs:
             elif [[ "$STATUS" == "Failed" || "$STATUS" == "Cancelled" ]]; then
               exit 1
             fi
-
             sleep 30
           done
-
-          aws ssm get-command-invocation \
-            --command-id $CMD_ID \
-            --instance-id $INSTANCE_ID \
-            --query "{stdout:StandardOutputContent,stderr:StandardErrorContent,status:Status}" \
-            --output json || true
 
           if [ "$STATUS" != "Success" ]; then
             echo "❌ Deployment failed"
