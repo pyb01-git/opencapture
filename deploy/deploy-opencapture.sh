@@ -35,10 +35,11 @@ sudo ./install.sh --custom_id test \
                    --wsgi_process 1 \
                    --wsgi_threads 5 \
                    --supervisor_systemd systemd \
-                   --database_hostname ${HOST_NAME:-localhost} \
-                   --database_port ${PORT:-5432} \
-                   --database_username ${USER_NAME:-opencapture} \
-                   --database_password ${USER_PASSWORD:-opencapture}
+                   --database_hostname ${DB_HOST_NAME:-localhost} \
+                   --database_port ${DB_PORT:-5432} \
+                   --database_username ${DB_USER_NAME:-opencapture} \
+                   --database_password ${DB_USER_PASSWORD:-opencapture} \
+                   --docserver_path ${DOCSERVER_PATH:-/var/docservers/opencapture/}
 
 # 4️⃣ Post-install checks
 #sudo systemctl status OCSplitter-worker_test.service
