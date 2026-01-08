@@ -67,12 +67,12 @@ jobs:
 
           echo "SSM Command ID: $CMD_ID"
 
-          for i in {1..30}; do
+          for i in {1..100}; do
             STATUS=$(aws ssm get-command-invocation \
               --command-id "$CMD_ID" \
               --instance-id "$INSTANCE_ID" \
-              --query "{stdout:StandardOutputContent,stderr:StandardErrorContent,status:Status}" \
-              --output json)
+              --query "Status" \
+              --output text)
 
             echo "SSM Status: $STATUS"
 
